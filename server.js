@@ -1,27 +1,31 @@
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend'); // Remplacement de nodemailer par Resend
 const fs = require('fs-extra');
 const path = require('path');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+
+// Initialisation de Resend avec la clé API d'environnement
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Chemins des fichiers de stockage
 const productsPath = path.join(__dirname, 'products.json');
 const messagesPath = path.join(__dirname, 'messages.json');
 
-app.use(cors({ origin: 'http://localhost:5173' }));
+// Configuration CORS pour autoriser ton localhost ET ton site Vercel en production
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://deluxe-business.vercel.app'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'blessingmingenge@gmail.com',
-    pass: 'mixf zoyt krnd iczk'
-  }
-});
 
 // Initialisation des données au démarrage
 let products = [];
@@ -83,35 +87,42 @@ app.post('/api/messages', async (req, res) => {
   messages.push(newMessage);
   await fs.writeJson(messagesPath, messages, { spaces: 2 });
 
-  const mailOptions = {
-    from: '"Boutique Contact" <blessingmingenge@gmail.com>',
-    to: 'blessingmingenge@gmail.com',
-    subject: `💬 Nouveau message : ${finalSubject}`,
-    html: `<p><strong>De:</strong> ${email}</p><p>${message}</p>`
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
+    await resend.emails.send({
+      from: 'Boutique Contact <onboarding@resend.dev>',
+      to: 'blessingmingenge@gmail.com',
+      subject: `💬 Nouveau message : ${finalSubject}`,
+      html: `<p><strong>De:</strong> ${email}</p><p>${message}</p>`
+    });
     res.status(201).json({ success: true, message: "Enregistré et envoyé." });
   } catch (error) {
+    console.error("Erreur Resend message:", error);
     res.status(201).json({ success: true, message: "Enregistré, échec mail." });
   }
 });
 
-// Auth OTP
+// Auth OTP avec Resend
 app.post('/api/auth/send-otp', async (req, res) => {
   const { email, otp } = req.body;
   try {
-    await transporter.sendMail({
-      from: '"Deluxe Boutique" <blessingmingenge@gmail.com>',
+    await resend.emails.send({
+      from: 'Deluxe Boutique <onboarding@resend.dev>',
       to: email,
       subject: '🔒 Votre code d\'accès',
-      html: `<h2>Code: ${otp}</h2>`
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Sécurité Deluxe Boutique</h2>
+          <p>Voici votre code de validation :</p>
+          <h1 style="color: #4F46E5; letter-spacing: 2px;">${otp}</h1>
+          <p>Ce code est strictement confidentiel.</p>
+        </div>
+      `
     });
     res.status(200).json({ success: true });
   } catch (e) {
-    res.status(500).json({ success: false });
+    console.error("Erreur Resend OTP:", e);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
-app.listen(PORT, () => console.log(`🚀 Serveur démarré sur : http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Serveur démarré sur le port ${PORT}`));

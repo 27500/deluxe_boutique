@@ -19,6 +19,7 @@
     "fs-extra": "^11.3.6",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.22.6",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "resend": "^6.20.0"
   }
 }

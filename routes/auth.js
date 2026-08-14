@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const { Resend } = require('resend'); // Import de Resend
+
+// Initialisation de Resend avec la clé API provenant des variables d'environnement
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // 1. Liste stricte et exclusive des deux adresses mails autorisées
 const ALLOWED_EMAILS = [
@@ -14,7 +18,7 @@ const otpStore = {};
 // ==========================================
 // ETAPE 1 : DEMANDE DU CODE OTP
 // ==========================================
-router.post('/request-otp', (req, res) => {
+router.post('/request-otp', async (req, res) => {
   const { email } = req.body;
   const cleanEmail = email?.toLowerCase().trim();
 
@@ -34,11 +38,28 @@ router.post('/request-otp', (req, res) => {
     expires: Date.now() + 5 * 60 * 1000 
   };
 
-  // ⚠️ POUR L'INSTANT : On l'affiche dans ta console de terminal backend.
-  // Plus tard, on pourra brancher un service pour l'envoyer réellement par mail.
-  console.log(`\n[OTP SECURITY] Code pour ${cleanEmail} ---> ${generatedOtp}\n`);
+  try {
+    // Envoi du mail via l'API de Resend
+    await resend.emails.send({
+      // Remplace par ton domaine vérifié sur Resend, ou utilise 'onboarding@resend.dev' pour les tests
+      from: 'Boutique <onboarding@resend.dev>', 
+      to: cleanEmail,
+      subject: 'Votre code de vérification (Admin)',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Sécurité de la Boutique</h2>
+          <p>Voici votre code de vérification à usage unique :</p>
+          <h1 style="color: #4F46E5; letter-spacing: 2px;">${generatedOtp}</h1>
+          <p>Ce code expire dans <strong>5 minutes</strong>.</p>
+        </div>
+      `
+    });
 
-  res.json({ message: "Un code de vérification vous a été réservé." });
+    res.json({ message: "Un code de vérification vous a été envoyé par email." });
+  } catch (error) {
+    console.error("Erreur lors de l'envoi de l'e-mail avec Resend :", error);
+    res.status(500).json({ message: "Erreur lors de l'envoi du code par e-mail." });
+  }
 });
 
 // ==========================================
